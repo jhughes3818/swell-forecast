@@ -249,3 +249,36 @@ export function scoreForecast(x: RatingInputs) {
     reasons,
   };
 }
+
+// lib/rating.ts (add near other helpers)
+export function estimateBreakingHeightM(
+  hs: number, // offshore/swell Hs (m)
+  tp: number, // peak period (s)
+  dp: number, // swell direction (coming-from, deg)
+  spot: Spot
+): number {
+  // 1) Directional exposure based on your existing window
+  const dir = directionQuality(dp, spot.swellDirMin, spot.swellDirMax); // 0..1
+
+  // 2) Period influence (longer period wraps/stands up better)
+  const minP = spot.minPeriod ?? 7;
+  const idealP = spot.idealPeriod ?? 13;
+  const period = periodQuality(tp, minP, idealP); // 0..1
+
+  // 3) Base exposure factor per spot (how sheltered the break is)
+  //    Huzzas is sheltered inside the bay; 0.35–0.55 is a reasonable starting range.
+  const baseExposure = (spot as any).exposure ?? 0.6; // 0..1
+
+  // 4) Compose into an attenuation factor (bounded, non-extreme)
+  //    - direction enters with strong effect
+  //    - period offers a moderate boost
+  //    - baseExposure caps max transfer into the bay
+  const dirTerm = 0.35 + 0.65 * dir; // 0.35..1.0
+  const periodTerm = 0.6 + 0.4 * period; // 0.6..1.0
+  const factor = baseExposure * dirTerm * periodTerm; // overall 0..1
+
+  // 5) Estimated breaker *face* height at spot (m)
+  //    Optional small bump (1.2x) since “face height” can be a bit > Hs locally
+  const faceMultiplier = 1.2;
+  return hs * factor * faceMultiplier;
+}

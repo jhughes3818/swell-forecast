@@ -2,7 +2,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSpot } from "@/lib/spots";
 import { fetchMarine } from "@/lib/openmeteo";
-import { evaluateRating, type Weights } from "@/lib/rating";
+import {
+  evaluateRating,
+  type Weights,
+  estimateBreakingHeightM,
+} from "@/lib/rating";
 import { tzFor } from "@/lib/timezone";
 // import { getCache, setCache } from '@/lib/cache'; // optional
 
@@ -62,6 +66,8 @@ export async function GET(req: NextRequest) {
       const wind = pt.windMs ?? 0;
       const windDir = pt.windDir ?? 0;
       const tide = pt.seaLevel ?? undefined;
+      const breaking_m = estimateBreakingHeightM(hs, tp, dp, spot);
+      const breaking_ft = breaking_m * 3.281;
 
       const rated = evaluateRating(
         { hs, tp, dp, wind, windDir, tide, spot },
@@ -91,6 +97,10 @@ export async function GET(req: NextRequest) {
           wind_dir: windDir,
           water_c: pt.waterC,
           sea_level_m: pt.seaLevel,
+        },
+        derived: {
+          breaking_m,
+          breaking_ft: Math.round(breaking_ft * 10) / 10,
         },
         components: rated.components,
         aggregate: rated.aggregate,

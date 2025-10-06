@@ -44,6 +44,10 @@ type HourRow = {
     water_c: number | null;
     sea_level_m: number | null;
   };
+  derived: {
+    breaking_m: number | null;
+    breaking_ft: number | null;
+  };
   components: ComponentAxis[];
   aggregate: {
     method: "geometric";
@@ -305,11 +309,13 @@ export default function RadarCard() {
                 <div className="text-sm text-gray-600 mb-1">Raw conditions</div>
                 <div className="grid grid-cols-2 gap-2 text-sm">
                   <div>
-                    <span className="text-gray-500">Swell height:</span>{" "}
-                    {(hour.raw.hs * 3.281).toFixed(1)} ft
-                    <span className="text-gray-400 ml-1 text-xs">
-                      ({hour.raw.hs.toFixed(2)} m)
-                    </span>
+                    <span className="text-gray-500">Est. breaking size:</span>{" "}
+                    {hour.derived?.breaking_ft?.toFixed(1)} ft
+                    {hour.raw.hs != null && (
+                      <span className="text-gray-400 ml-1 text-xs">
+                        (offshore Hs {hour.raw.hs.toFixed(2)} m)
+                      </span>
+                    )}
                   </div>
                   <div>
                     <span className="text-gray-500">Swell period:</span>{" "}
@@ -424,7 +430,12 @@ export default function RadarCard() {
                         fill={t.color}
                         opacity={i === idx ? 1 : 0.75}
                         cursor="pointer"
-                        onClick={() => setIdx(i)}
+                        onMouseEnter={() => setIdx(i)} // ← hover updates the radar
+                        onClick={() => setIdx(i)} // click still works
+                        onFocus={() => setIdx(i)} // keyboard/tab support
+                        tabIndex={0}
+                        role="button"
+                        aria-label={`Hour ${t.hour} score ${t.score}`}
                       />
                     ))}
                   </Bar>

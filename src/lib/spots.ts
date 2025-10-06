@@ -17,6 +17,7 @@ export type Spot = {
   minPeriod?: number; // seconds
   idealPeriod?: number;
   notes?: string;
+  exposure?: number;
 };
 
 export const spots: Spot[] = [
@@ -48,6 +49,7 @@ export const spots: Spot[] = [
     idealPeriod: 14,
     notes:
       "Reef; best on low-mid tide; SE winds favorable; both lefts & rights. Hazards: rocks & shallow reef.",
+    exposure: 0.45,
   },
   {
     id: "trigg",
@@ -72,6 +74,32 @@ export const spots: Spot[] = [
     swellDirMax: 260,
     minPeriod: 9,
     idealPeriod: 15,
+  },
+  {
+    id: "pipeline",
+    name: "Pipeline (Oahu)",
+    lat: 21.667,
+    lon: -158.05,
+    coastBearing: 270,
+    breakType: "reef",
+    swellDirMin: 240,
+    swellDirMax: 300,
+    minPeriod: 8,
+    idealPeriod: 14,
+    exposure: 0.8,
+  },
+  {
+    id: "malibu_point",
+    name: "Malibu Point",
+    lat: 34.025,
+    lon: -118.8,
+    coastBearing: 260,
+    breakType: "point",
+    swellDirMin: 200,
+    swellDirMax: 260,
+    minPeriod: 7,
+    idealPeriod: 13,
+    exposure: 0.6,
   },
 ];
 
