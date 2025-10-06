@@ -21,6 +21,11 @@ import {
   Cell,
 } from "recharts";
 
+import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
+import "leaflet/dist/leaflet.css";
+
+import SpotMap from "./SpotMap";
+
 // -----------------------------------------------------------------------------
 // RadarCard – Fetches /api/forecast?spot_id=trigg and renders:
 // 1) A radar (snowflake) chart of component scores (0..1)
@@ -71,6 +76,54 @@ type ApiPayload = {
 };
 
 type SpotSummary = { id: string; name: string; lat: number; lon: number };
+
+type DirectionArrowProps = {
+  degrees: number | null | undefined;
+  color: string;
+  label: string;
+  offsetX?: number;
+};
+
+function DirectionArrow({
+  degrees,
+  color,
+  label,
+  offsetX = 0,
+}: DirectionArrowProps) {
+  if (degrees == null || Number.isNaN(degrees)) return null;
+  return (
+    <div
+      className="absolute left-1/2 top-1/2 pointer-events-none"
+      style={{ transform: `translate(-50%, -50%) translateX(${offsetX}px)` }}
+    >
+      <div className="relative flex flex-col items-center">
+        <div
+          className="origin-bottom"
+          style={{
+            transform: `rotate(${degrees}deg)`,
+            transformOrigin: "center bottom",
+          }}
+        >
+          <div
+            className="mx-auto h-16 w-1 rounded-full"
+            style={{ backgroundColor: color, opacity: 0.85 }}
+          />
+          <div
+            className="mx-auto mt-1 h-0 w-0 border-l-[6px] border-r-[6px] border-t-[12px]"
+            style={{
+              borderLeftColor: "transparent",
+              borderRightColor: "transparent",
+              borderTopColor: color,
+            }}
+          />
+        </div>
+        <div className="mt-2 rounded-full bg-black/70 px-2 py-0.5 text-xs text-white">
+          {label}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // --- color helper: map overall 0..10 to red→yellow→green using HSL hue 0..120 ---
 function colorFromScore(score0to10: number) {
@@ -305,6 +358,13 @@ export default function RadarCard() {
 
             {/* Details */}
             <div className="flex flex-col gap-3">
+              <SpotMap
+                spot={data?.spot ?? null}
+                swellDeg={hour.raw.dp}
+                windDeg={hour.raw.wind_dir}
+                windSpeed={hour.raw.wind_ms}
+              />
+
               <div className="rounded-xl bg-gray-50 p-3">
                 <div className="text-sm text-gray-600 mb-1">Raw conditions</div>
                 <div className="grid grid-cols-2 gap-2 text-sm">
