@@ -3,36 +3,30 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSpot } from "@/lib/spots";
 import { fetchMarine } from "@/lib/openmeteo";
 import { evaluateRating, type Weights } from "@/lib/rating";
-
-// If you added the tiny TTL cache earlier, uncomment these:
-// import { getCache, setCache } from '@/lib/cache';
+import { tzFor } from "@/lib/timezone";
+// import { getCache, setCache } from '@/lib/cache'; // optional
 
 export const dynamic = "force-dynamic";
 
-// Accept weights either as CSV "wind:0.2,dir:0.3,period:0.1,size:0.3,tide:0.1"
-// or as JSON via weights_json={"wind":0.2,...}
 function parseWeights(searchParams: URLSearchParams): Weights | undefined {
-  const jsonStr = searchParams.get("weights_json");
-  if (jsonStr) {
+  const json = searchParams.get("weights_json");
+  if (json) {
     try {
-      const parsed = JSON.parse(jsonStr);
-      return parsed;
-    } catch {
-      // fall through to CSV
-    }
+      return JSON.parse(json);
+    } catch {}
   }
-
   const csv = searchParams.get("weights");
-  if (!csv) return undefined;
-
+  if (!csv) return;
   const out: Record<string, number> = {};
   for (const part of csv.split(",")) {
-    const [kRaw, vRaw] = part.split(":").map((s) => s.trim());
-    if (!kRaw || !vRaw) continue;
-    const v = Number(vRaw);
-    if (!Number.isFinite(v)) continue;
-    // only accept known keys
-    if (["wind", "dir", "period", "size", "tide"].includes(kRaw)) out[kRaw] = v;
+    const [k, v] = part.split(":").map((s) => s.trim());
+    if (!k || v == null) continue;
+    const n = Number(v);
+    if (
+      Number.isFinite(n) &&
+      ["wind", "dir", "period", "size", "tide"].includes(k)
+    )
+      out[k] = n;
   }
   return out as Weights;
 }
@@ -43,23 +37,25 @@ export async function GET(req: NextRequest) {
   const weights = parseWeights(p);
 
   const spot = getSpot(spotId);
-  if (!spot) {
+  if (!spot)
     return NextResponse.json(
       { error: `Unknown spot_id='${spotId}'` },
       { status: 400 }
     );
-  }
 
-  // Optional caching (uncomment if using lib/cache):
-  // const cacheKey = `forecast:${spot.id}:${JSON.stringify(weights ?? {})}`;
-  // const cached = getCache<any>(cacheKey);
-  // if (cached) return NextResponse.json(cached);
+  // 1) Timezone: override via ?tz=..., else derive from coords
+  const tz = p.get("tz") || tzFor(spot.lat, spot.lon);
+
+  // Optional cache:
+  // const cacheKey = `forecast:${spot.id}:${tz}:${JSON.stringify(weights ?? {})}`;
+  // const cached = getCache<any>(cacheKey); if (cached) return NextResponse.json(cached);
 
   try {
-    const marine = await fetchMarine(spot.lat, spot.lon, "Australia/Perth");
+    // 2) Fetch in that timezone (open-meteo returns local times)
+    const marine = await fetchMarine(spot.lat, spot.lon, tz);
 
+    // 3) Map to radar-friendly rows
     const hours = marine.map((pt) => {
-      // Prefer swell-specific series; fall back to total if needed
       const hs = pt.swellHs ?? pt.hs ?? 0;
       const tp = pt.swellTp ?? pt.tp ?? 0;
       const dp = pt.swellDp ?? pt.dp ?? 0;
@@ -72,13 +68,13 @@ export async function GET(req: NextRequest) {
         weights
       );
 
-      // Lightweight badges (optional)
-      const badges: string[] = [];
+      // small badges, optional
       const offshoreDir = (spot.coastBearing + 180) % 360;
       const angDiff = (a: number, b: number) => {
         const d = Math.abs(a - b) % 360;
         return Math.min(d, 360 - d);
       };
+      const badges: string[] = [];
       if (wind < 5 && angDiff(windDir, offshoreDir) > 90)
         badges.push("Light/offshore");
       if (tp >= (spot.idealPeriod ?? 13)) badges.push("Good period");
@@ -86,7 +82,7 @@ export async function GET(req: NextRequest) {
       if (hs > 2.5 && spot.breakType === "beach") badges.push("Big for beach");
 
       return {
-        ts: pt.ts, // Local time per fetchMarine timezone
+        ts: pt.ts,
         raw: {
           hs,
           tp,
@@ -96,18 +92,17 @@ export async function GET(req: NextRequest) {
           water_c: pt.waterC,
           sea_level_m: pt.seaLevel,
         },
-        components: rated.components, // [{id,label,score:0..1}, ...] (radar axes)
-        aggregate: rated.aggregate, // {method:'geometric', score_0_10, weights} | null
-        reasons: rated.reasons, // quick human explainer
+        components: rated.components,
+        aggregate: rated.aggregate,
+        reasons: rated.reasons,
         badges,
         source: "open-meteo:marine+weather",
       };
     });
 
-    // Quick “today” summary over next 24 hours (aggregate or average component fill)
+    // Summary for the next 24 hours
     const next24 = hours.slice(0, 24);
     const summary = {
-      // If aggregate exists, show min/max; otherwise compute mean fill across axes
       aggregate_min: next24.reduce(
         (m, h) => Math.min(m, h.aggregate?.score_0_10 ?? 10),
         10
@@ -116,34 +111,34 @@ export async function GET(req: NextRequest) {
         (m, h) => Math.max(m, h.aggregate?.score_0_10 ?? 0),
         0
       ),
-      mean_component_fill: (() => {
-        const n = next24.length || 1;
-        const sum = next24.reduce((acc, h) => {
-          const c = h.components;
-          const s = c.reduce((a, x) => a + x.score, 0) / (c.length || 1);
-          return acc + s;
-        }, 0);
-        return Number((sum / n).toFixed(3)); // 0..1
-      })(),
+      mean_component_fill: Number(
+        (
+          next24.reduce(
+            (acc, h) =>
+              acc +
+              h.components.reduce((a, x) => a + x.score, 0) /
+                (h.components.length || 1),
+            0
+          ) / (next24.length || 1)
+        ).toFixed(3)
+      ),
     };
 
     const payload = {
       spot: { id: spot.id, name: spot.name, lat: spot.lat, lon: spot.lon },
       meta: {
-        timezone: "Australia/Perth",
+        timezone: tz, // ✅ echo the resolved timezone
         source: "Open-Meteo Marine + Weather",
-        weights: weights ?? null, // echo back if provided
+        weights: weights ?? null,
+        window: { start: hours[0]?.ts ?? null, hours: hours.length }, // optional
       },
       today_summary: summary,
       hours,
     };
 
-    // Optional cache set:
     // setCache(cacheKey, payload, 30 * 60 * 1000);
-
     return NextResponse.json(payload);
   } catch (e: any) {
-    // When Open-Meteo returns a 4xx/5xx, propagate a helpful message
     return NextResponse.json(
       { error: e?.message ?? "Failed to fetch forecast" },
       { status: 502 }

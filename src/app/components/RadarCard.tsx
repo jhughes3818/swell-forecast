@@ -66,6 +66,8 @@ type ApiPayload = {
   hours: HourRow[];
 };
 
+type SpotSummary = { id: string; name: string; lat: number; lon: number };
+
 // --- color helper: map overall 0..10 to red→yellow→green using HSL hue 0..120 ---
 function colorFromScore(score0to10: number) {
   const s = Math.max(0, Math.min(10, score0to10));
@@ -88,20 +90,47 @@ function formatHour(ts: string) {
 }
 
 export default function RadarCard() {
+  const [spots, setSpots] = useState<SpotSummary[]>([]);
+  const [selectedSpot, setSelectedSpot] = useState<string>("trigg");
   const [data, setData] = useState<ApiPayload | null>(null);
   const [idx, setIdx] = useState<number>(0);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Load spots list once
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/spots", { cache: "no-store" });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const list = (await res.json()) as SpotSummary[];
+        if (!cancelled) {
+          setSpots(list);
+          if (!list.find((s) => s.id === selectedSpot)) {
+            setSelectedSpot(list[0]?.id ?? "trigg");
+          }
+        }
+      } catch {
+        /* ignore */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Fetch forecast for the selected spot
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
         setLoading(true);
         setError(null);
-        const res = await fetch(`/api/forecast?spot_id=trigg`, {
-          cache: "no-store",
-        });
+        const res = await fetch(
+          `/api/forecast?spot_id=${encodeURIComponent(selectedSpot)}`,
+          { cache: "no-store" }
+        );
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const json = (await res.json()) as ApiPayload;
         if (!cancelled) {
@@ -117,7 +146,7 @@ export default function RadarCard() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [selectedSpot]);
 
   const hour = useMemo(() => data?.hours?.[idx] ?? null, [data, idx]);
 
@@ -188,7 +217,24 @@ export default function RadarCard() {
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <button
+            {/* Spot selector */}
+            <label className="text-sm text-gray-600" htmlFor="spot-select">
+              Spot
+            </label>
+            <select
+              id="spot-select"
+              className="px-2 py-1 text-sm border rounded-lg bg-white"
+              value={selectedSpot}
+              onChange={(e) => setSelectedSpot(e.target.value)}
+            >
+              {spots.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+
+            {/* <button
               className={`px-3 py-1 rounded-xl border text-sm ${
                 canPrev
                   ? "bg-gray-50 hover:bg-gray-100"
@@ -214,7 +260,7 @@ export default function RadarCard() {
               aria-label="Next hour"
             >
               Next
-            </button>
+            </button> */}
           </div>
         </div>
 
@@ -260,7 +306,10 @@ export default function RadarCard() {
                 <div className="grid grid-cols-2 gap-2 text-sm">
                   <div>
                     <span className="text-gray-500">Swell height:</span>{" "}
-                    {hour.raw.hs.toFixed(2)} m
+                    {(hour.raw.hs * 3.281).toFixed(1)} ft
+                    <span className="text-gray-400 ml-1 text-xs">
+                      ({hour.raw.hs.toFixed(2)} m)
+                    </span>
                   </div>
                   <div>
                     <span className="text-gray-500">Swell period:</span>{" "}
@@ -375,12 +424,7 @@ export default function RadarCard() {
                         fill={t.color}
                         opacity={i === idx ? 1 : 0.75}
                         cursor="pointer"
-                        onMouseEnter={() => setIdx(i)} // ← hover updates the selected hour
-                        onClick={() => setIdx(i)} // click still works
-                        onFocus={() => setIdx(i)} // keyboard focus support
-                        tabIndex={0}
-                        role="button"
-                        aria-label={`Hour ${t.hour} score ${t.score}`}
+                        onClick={() => setIdx(i)}
                       />
                     ))}
                   </Bar>

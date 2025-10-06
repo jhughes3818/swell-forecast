@@ -19,6 +19,7 @@ type MarineJSON = {
 };
 
 type WeatherJSON = {
+  hourly_units?: { wind_speed_10m?: string; wind_direction_10m?: string };
   hourly: {
     time: string[];
     wind_speed_10m?: number[];
@@ -90,18 +91,33 @@ export async function fetchMarine(
   if (!weatherRes.ok) throw new Error(`Open-Meteo error ${weatherRes.status}`);
   const w = (await weatherRes.json()) as WeatherJSON;
 
+  const unit = w.hourly_units?.wind_speed_10m ?? "km/h";
+  function toMs(value: number | null): number | null {
+    if (value == null) return null;
+    switch (unit) {
+      case "m/s":
+        return value;
+      case "km/h":
+        return value / 3.6;
+      case "mph":
+        return value * 0.44704;
+      case "kn":
+        return value * 0.514444;
+      default:
+        return value; // assume m/s if unknown
+    }
+  }
+
   // Build a lookup for wind by timestamp
   const windIndex = new Map<
     string,
     { windMs: number | null; windDir: number | null }
   >();
-  if (w.hourly?.time) {
-    for (let i = 0; i < w.hourly.time.length; i++) {
-      windIndex.set(w.hourly.time[i], {
-        windMs: j(w.hourly.wind_speed_10m, i),
-        windDir: j(w.hourly.wind_direction_10m, i),
-      });
-    }
+  for (let i = 0; i < (w.hourly.time?.length ?? 0); i++) {
+    windIndex.set(w.hourly.time[i], {
+      windMs: toMs(w.hourly.wind_speed_10m?.[i] ?? null),
+      windDir: w.hourly.wind_direction_10m?.[i] ?? null,
+    });
   }
 
   // Merge marine rows + wind
@@ -124,6 +140,30 @@ export async function fetchMarine(
       seaLevel: j(m.hourly.sea_level_height_msl, i),
     });
   }
+
+  // --- keep only from the start of the *current hour* in the requested timezone, next 48h ---
+  function currentHourISOInTZ(tz: string) {
+    // Build "YYYY-MM-DDTHH:00" in the given IANA timezone
+    const now = new Date();
+    const parts = new Intl.DateTimeFormat("en-CA", {
+      timeZone: tz,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    }).formatToParts(now);
+    const get = (t: Intl.DateTimeFormatPartTypes) =>
+      parts.find((p) => p.type === t)?.value!;
+    return `${get("year")}-${get("month")}-${get("day")}T${get("hour")}:00`;
+  }
+
+  const startTs = currentHourISOInTZ(timezone); // timezone is the param you already pass to fetchMarine
+  // Open-Meteo returns "YYYY-MM-DDTHH:MM" in that same timezone → lexicographic compare is safe
+  const next48 = out.filter((row) => row.ts >= startTs).slice(0, 48);
+
+  return next48;
 
   return out;
 }

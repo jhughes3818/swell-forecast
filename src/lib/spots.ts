@@ -16,9 +16,10 @@ export type Spot = {
   maxTide?: number;
   minPeriod?: number; // seconds
   idealPeriod?: number;
+  notes?: string;
 };
 
-export const SPOTS: Spot[] = [
+export const spots: Spot[] = [
   {
     id: "cottesloe",
     name: "Cottesloe",
@@ -30,6 +31,23 @@ export const SPOTS: Spot[] = [
     swellDirMax: 240,
     minPeriod: 8,
     idealPeriod: 13,
+  },
+  {
+    id: "huzzas",
+    name: "Huzzas",
+    lat: -33.86419,
+    lon: 114.980827,
+    coastBearing: 270, // guess: the reef faces roughly west — you may refine
+    breakType: "reef",
+    swellDirMin: 240, // support W / WSW swells; you can widen/adjust
+    swellDirMax: 300,
+    minTide: 0.0, // you’ll calibrate with real tide data later
+    idealTide: 0.5,
+    maxTide: 1.5,
+    minPeriod: 8,
+    idealPeriod: 14,
+    notes:
+      "Reef; best on low-mid tide; SE winds favorable; both lefts & rights. Hazards: rocks & shallow reef.",
   },
   {
     id: "trigg",
@@ -57,4 +75,8 @@ export const SPOTS: Spot[] = [
   },
 ];
 
-export const getSpot = (id: string) => SPOTS.find((s) => s.id === id);
+export const getSpot = (id: string) => spots.find((s) => s.id === id);
+
+export function getAllSpots() {
+  return spots;
+}
