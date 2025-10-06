@@ -72,6 +72,127 @@ type ApiPayload = {
 
 type SpotSummary = { id: string; name: string; lat: number; lon: number };
 
+type DirectionArrowProps = {
+  degrees: number | null | undefined;
+  color: string;
+  label: string;
+  offsetX?: number;
+};
+
+function DirectionArrow({ degrees, color, label, offsetX = 0 }: DirectionArrowProps) {
+  if (degrees == null || Number.isNaN(degrees)) return null;
+  return (
+    <div
+      className="absolute left-1/2 top-1/2 pointer-events-none"
+      style={{ transform: `translate(-50%, -50%) translateX(${offsetX}px)` }}
+    >
+      <div className="relative flex flex-col items-center">
+        <div
+          className="origin-bottom"
+          style={{
+            transform: `rotate(${degrees}deg)`,
+            transformOrigin: "center bottom",
+          }}
+        >
+          <div
+            className="mx-auto h-16 w-1 rounded-full"
+            style={{ backgroundColor: color, opacity: 0.85 }}
+          />
+          <div
+            className="mx-auto mt-1 h-0 w-0 border-l-[6px] border-r-[6px] border-t-[12px]"
+            style={{
+              borderLeftColor: "transparent",
+              borderRightColor: "transparent",
+              borderTopColor: color,
+            }}
+          />
+        </div>
+        <div className="mt-2 rounded-full bg-black/70 px-2 py-0.5 text-xs text-white">
+          {label}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+type SpotMapProps = {
+  spot: SpotSummary | null;
+  swellDeg: number | null | undefined;
+  windDeg: number | null | undefined;
+  windSpeed: number | null | undefined;
+};
+
+function SpotMap({ spot, swellDeg, windDeg, windSpeed }: SpotMapProps) {
+  const url = useMemo(() => {
+    if (!spot) return null;
+    const zoom = 12;
+    const size = "600x400";
+    const marker = `${spot.lat.toFixed(5)},${spot.lon.toFixed(5)},lightblue1`;
+    return `https://staticmap.openstreetmap.de/staticmap.php?center=${spot.lat.toFixed(
+      5,
+    )},${spot.lon.toFixed(5)}&zoom=${zoom}&size=${size}&maptype=mapnik&markers=${marker}`;
+  }, [spot]);
+
+  if (!spot || !url) return null;
+
+  const swellLabel =
+    swellDeg == null || Number.isNaN(swellDeg)
+      ? null
+      : `Swell ${Math.round(swellDeg)}°`;
+  const windLabel =
+    windDeg == null || Number.isNaN(windDeg)
+      ? null
+      : `Wind ${Math.round(windDeg)}°${
+          windSpeed != null && !Number.isNaN(windSpeed)
+            ? ` · ${(windSpeed * 1.94384).toFixed(0)} kt`
+            : ""
+        }`;
+
+  return (
+    <div className="rounded-xl border border-gray-200 bg-gray-50">
+      <div className="relative h-64 overflow-hidden rounded-t-xl">
+        <img
+          src={url}
+          alt={`Map showing ${spot.name}`}
+          className="h-full w-full object-cover"
+          loading="lazy"
+        />
+        <div className="absolute inset-0 bg-gradient-to-b from-black/0 via-black/0 to-black/20" />
+        <DirectionArrow
+          degrees={swellDeg}
+          color="#0ea5e9"
+          label={swellLabel ?? "Swell direction unavailable"}
+          offsetX={-70}
+        />
+        <DirectionArrow
+          degrees={windDeg}
+          color="#f97316"
+          label={windLabel ?? "Wind direction unavailable"}
+          offsetX={70}
+        />
+        <div className="absolute left-3 top-3 rounded-lg bg-black/60 px-3 py-1 text-xs font-medium text-white shadow">
+          {spot.name}
+        </div>
+      </div>
+      <div className="flex items-center justify-between px-3 py-2 text-xs text-gray-600">
+        <div>
+          Lat {spot.lat.toFixed(3)} • Lon {spot.lon.toFixed(3)}
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="flex items-center gap-1 text-sky-700">
+            <span className="inline-block h-2 w-2 rounded-full bg-sky-500" />
+            Swell
+          </span>
+          <span className="flex items-center gap-1 text-orange-700">
+            <span className="inline-block h-2 w-2 rounded-full bg-orange-400" />
+            Wind
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // --- color helper: map overall 0..10 to red→yellow→green using HSL hue 0..120 ---
 function colorFromScore(score0to10: number) {
   const s = Math.max(0, Math.min(10, score0to10));
@@ -305,6 +426,13 @@ export default function RadarCard() {
 
             {/* Details */}
             <div className="flex flex-col gap-3">
+              <SpotMap
+                spot={data?.spot ?? null}
+                swellDeg={hour.raw.dp}
+                windDeg={hour.raw.wind_dir}
+                windSpeed={hour.raw.wind_ms}
+              />
+
               <div className="rounded-xl bg-gray-50 p-3">
                 <div className="text-sm text-gray-600 mb-1">Raw conditions</div>
                 <div className="grid grid-cols-2 gap-2 text-sm">
