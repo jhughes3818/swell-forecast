@@ -21,6 +21,11 @@ import {
   Cell,
 } from "recharts";
 
+import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
+import "leaflet/dist/leaflet.css";
+
+import SpotMap from "./SpotMap";
+
 // -----------------------------------------------------------------------------
 // RadarCard – Fetches /api/forecast?spot_id=trigg and renders:
 // 1) A radar (snowflake) chart of component scores (0..1)
@@ -79,7 +84,12 @@ type DirectionArrowProps = {
   offsetX?: number;
 };
 
-function DirectionArrow({ degrees, color, label, offsetX = 0 }: DirectionArrowProps) {
+function DirectionArrow({
+  degrees,
+  color,
+  label,
+  offsetX = 0,
+}: DirectionArrowProps) {
   if (degrees == null || Number.isNaN(degrees)) return null;
   return (
     <div
@@ -109,84 +119,6 @@ function DirectionArrow({ degrees, color, label, offsetX = 0 }: DirectionArrowPr
         </div>
         <div className="mt-2 rounded-full bg-black/70 px-2 py-0.5 text-xs text-white">
           {label}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-type SpotMapProps = {
-  spot: SpotSummary | null;
-  swellDeg: number | null | undefined;
-  windDeg: number | null | undefined;
-  windSpeed: number | null | undefined;
-};
-
-function SpotMap({ spot, swellDeg, windDeg, windSpeed }: SpotMapProps) {
-  const url = useMemo(() => {
-    if (!spot) return null;
-    const zoom = 12;
-    const size = "600x400";
-    const marker = `${spot.lat.toFixed(5)},${spot.lon.toFixed(5)},lightblue1`;
-    return `https://staticmap.openstreetmap.de/staticmap.php?center=${spot.lat.toFixed(
-      5,
-    )},${spot.lon.toFixed(5)}&zoom=${zoom}&size=${size}&maptype=mapnik&markers=${marker}`;
-  }, [spot]);
-
-  if (!spot || !url) return null;
-
-  const swellLabel =
-    swellDeg == null || Number.isNaN(swellDeg)
-      ? null
-      : `Swell ${Math.round(swellDeg)}°`;
-  const windLabel =
-    windDeg == null || Number.isNaN(windDeg)
-      ? null
-      : `Wind ${Math.round(windDeg)}°${
-          windSpeed != null && !Number.isNaN(windSpeed)
-            ? ` · ${(windSpeed * 1.94384).toFixed(0)} kt`
-            : ""
-        }`;
-
-  return (
-    <div className="rounded-xl border border-gray-200 bg-gray-50">
-      <div className="relative h-64 overflow-hidden rounded-t-xl">
-        <img
-          src={url}
-          alt={`Map showing ${spot.name}`}
-          className="h-full w-full object-cover"
-          loading="lazy"
-        />
-        <div className="absolute inset-0 bg-gradient-to-b from-black/0 via-black/0 to-black/20" />
-        <DirectionArrow
-          degrees={swellDeg}
-          color="#0ea5e9"
-          label={swellLabel ?? "Swell direction unavailable"}
-          offsetX={-70}
-        />
-        <DirectionArrow
-          degrees={windDeg}
-          color="#f97316"
-          label={windLabel ?? "Wind direction unavailable"}
-          offsetX={70}
-        />
-        <div className="absolute left-3 top-3 rounded-lg bg-black/60 px-3 py-1 text-xs font-medium text-white shadow">
-          {spot.name}
-        </div>
-      </div>
-      <div className="flex items-center justify-between px-3 py-2 text-xs text-gray-600">
-        <div>
-          Lat {spot.lat.toFixed(3)} • Lon {spot.lon.toFixed(3)}
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="flex items-center gap-1 text-sky-700">
-            <span className="inline-block h-2 w-2 rounded-full bg-sky-500" />
-            Swell
-          </span>
-          <span className="flex items-center gap-1 text-orange-700">
-            <span className="inline-block h-2 w-2 rounded-full bg-orange-400" />
-            Wind
-          </span>
         </div>
       </div>
     </div>
